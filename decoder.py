@@ -1,3 +1,4 @@
+# python decoder.py -m input.json input.bin
 import json
 import struct
 import sys
