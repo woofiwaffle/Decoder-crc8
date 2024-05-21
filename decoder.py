@@ -2,28 +2,17 @@ import json
 import struct
 import sys
 import argparse
-
+import crc8
 
 def read_json_format_strings(json_path):
     with open(json_path, 'r') as f:
         return json.load(f)
 
+def crc8_check(data):
+    hash = crc8.crc8()
+    hash.update(data)
+    return hash.digest()[0]
 
-# функция для вычисления crc8
-def crc8(data):
-    crc = 0
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 0x80:
-                crc = (crc << 1) ^ 0x07
-            else:
-                crc <<= 1
-            crc &= 0xFF
-    return crc
-
-
-# функция парсинга для бинарного кода
 def parse_binary_log_file(binary_path, format_strings):
     with open(binary_path, 'rb') as f:
         page_size = 512
@@ -32,6 +21,7 @@ def parse_binary_log_file(binary_path, format_strings):
             page = f.read(page_size)
             if not page:
                 break
+            # Обработка каждой страницы
             print(f"Processing page {page_number}", file=sys.stderr)
             try:
                 parse_page(page, format_strings)
@@ -39,8 +29,6 @@ def parse_binary_log_file(binary_path, format_strings):
                 print(f"Error parsing page {page_number}: {e}", file=sys.stderr)
             page_number += 1
 
-
-# функция для парсинга бинарного файла журнала
 def parse_page(page, format_strings):
     offset = 0
     page_size = len(page)
@@ -49,31 +37,28 @@ def parse_page(page, format_strings):
     while offset < page_size:
         try:
             if page_size - offset < 10:
-                # print(f"No enough data for SyncFrame at offset {offset}", file=sys.stderr)
                 break
 
+            # Разбор SyncFrame
             crc8_value, size, string_addr, timestamp = struct.unpack_from('<BBII', page, offset)
-            expected_crc8 = crc8(page[offset + 1:offset + size])
+            expected_crc8 = crc8_check(page[offset + 1:offset + size])
             print(
                 f"SyncFrame - CRC8: {crc8_value}, Expected CRC8: {expected_crc8}, Size: {size}, StringAddr: {string_addr}, Timestamp: {timestamp}",
                 file=sys.stderr)
 
             if string_addr != 0 or expected_crc8 != crc8_value:
-                # print(f"Invalid SyncFrame at offset {offset}", file=sys.stderr)
-                # offset += size
-                # continue
                 break
 
             offset += size
             last_timestamp = timestamp
 
+            # Разбор Message
             while offset < page_size:
                 if page_size - offset < 10:
-                    # print(f"No enough data for Message at offset {offset}", file=sys.stderr)
                     break
 
                 crc8_value, size, string_addr, time_offset_us = struct.unpack_from('<BBII', page, offset)
-                expected_crc8 = crc8(page[offset + 1:offset + size])
+                expected_crc8 = crc8_check(page[offset + 1:offset + size])
                 print(
                     f"Message - CRC8: {crc8_value}, Expected CRC8: {expected_crc8}, Size: {size}, "
                     f"StringAddr: {string_addr}, "
@@ -85,28 +70,26 @@ def parse_page(page, format_strings):
                     offset += size
                     continue
 
+                # Извлечение данных из сообщения
                 data = page[offset + 10:offset + size]
                 if str(string_addr) in format_strings:
                     format_string = format_strings[str(string_addr)]
-                    print_log_message(last_timestamp, time_offset_us, format_string, data)
+                    print_log_message(last_timestamp, time_offset_us, format_string, data, format_strings)
                 else:
                     print(f"Unknown format string address {string_addr} at offset {offset}", file=sys.stderr)
 
                 offset += size
         except Exception as e:
-            # print(f"Error processing data at offset {offset}: {e}", file=sys.stderr)
-            # Move to the next SyncFrame or break if no more data
             while offset < page_size:
-                if page[offset] == 0:  # SyncFrame
+                if page[offset] == 0:
                     offset += 10
                     break
                 offset += 1
 
-
-def print_log_message(timestamp, time_offset_us, format_string, data):
+def print_log_message(timestamp, time_offset_us, format_string, data, format_strings):
     timestamp_str = f"{timestamp:010}.{time_offset_us:06}"
     try:
-        arguments = parse_arguments(format_string, data)
+        arguments = parse_arguments(format_string, data, format_strings)
         log_message = format_string % tuple(arguments)
     except TypeError as e:
         log_message = format_string % tuple(f"%{fmt}" for fmt in format_string.split('%')[1:])
@@ -114,8 +97,7 @@ def print_log_message(timestamp, time_offset_us, format_string, data):
 
     print(f"{timestamp_str} {log_message}")
 
-
-def parse_arguments(format_string, data):
+def parse_arguments(format_string, data, format_strings):
     specifiers = {
         'c': 'b',
         'd': 'i',
@@ -126,12 +108,11 @@ def parse_arguments(format_string, data):
         'lld': 'q',
         'llu': 'Q'
     }
-
     args = []
     data_offset = 0
     format_parts = format_string.split('%')[1:]
     for part in format_parts:
-        specifier = part.strip("0123456789._")
+        specifier = ''.join(filter(str.isalpha, part))
         if specifier in specifiers:
             fmt = specifiers[specifier]
             size = struct.calcsize(fmt)
@@ -141,7 +122,10 @@ def parse_arguments(format_string, data):
                 break
             value = struct.unpack_from(fmt, data, data_offset)[0]
             if specifier == 's':
-                value = value.to_bytes(4, 'little').decode('utf-8')
+                if str(value) in format_strings:
+                    value = format_strings[str(value)]
+                else:
+                    value = f"<unknown string at {value}>"
             elif specifier == 'X':
                 value = f"{value:08X}"
             elif specifier == 'u':
@@ -161,6 +145,7 @@ def main():
 
     args = parser.parse_args()
 
+    # Вывод путей к файлам
     print(f"Binary file: {args.binary_file}", file=sys.stderr)
     print(f"JSON file: {args.json_file}", file=sys.stderr)
 
@@ -169,7 +154,6 @@ def main():
         parse_binary_log_file(args.binary_file, format_strings)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
-
 
 if __name__ == '__main__':
     main()
