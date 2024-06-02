@@ -4,6 +4,7 @@ import struct
 import sys
 import argparse
 import crc8
+import re
 
 def read_json_format_strings(json_path):
     with open(json_path, 'r') as f:
@@ -98,6 +99,7 @@ def print_log_message(timestamp, time_offset_us, format_string, data, format_str
 
     print(f"{timestamp_str} {log_message}")
 
+
 def parse_arguments(format_string, data, format_strings):
     specifiers = {
         'c': 'b',
@@ -109,17 +111,21 @@ def parse_arguments(format_string, data, format_strings):
         'lld': 'q',
         'llu': 'Q'
     }
+
     args = []
     data_offset = 0
-    format_parts = format_string.split('%')[1:]
-    for part in format_parts:
-        specifier = ''.join(filter(str.isalpha, part))
+
+    format_specifier_pattern = re.compile(r'%(\d+\$)?([+\-#0 ]?\d*\.?\d*)([cduxXslldllu])')
+    matches = format_specifier_pattern.finditer(format_string)
+
+    for match in matches:
+        specifier = match.group(3)
         if specifier in specifiers:
             fmt = specifiers[specifier]
             size = struct.calcsize(fmt)
             if data_offset + size > len(data):
                 print(f"Not enough data for format specifier {specifier} in format string '{format_string}'",
-                     file=sys.stderr)
+                      file=sys.stderr)
                 break
             value = struct.unpack_from(fmt, data, data_offset)[0]
             if specifier == 's':
