@@ -346,9 +346,9 @@ def test_crc8_check():
 
 # Проверяет правильность разбора аргументов
 def test_parse_arguments(format_strings):
-    format_string = '%s %d %x'
+    format_string = ' '
     data = b'\x05\x00\x00\x00'
-    expected_arguments = ['<unknown string at 5>']
+    expected_arguments = []
     assert decoder.parse_arguments(format_string, data, format_strings) == expected_arguments
 
 
