@@ -3,7 +3,6 @@ import json
 import struct
 import sys
 import argparse
-import crc8
 import re
 
 def read_json_format_strings(json_path):
@@ -11,9 +10,16 @@ def read_json_format_strings(json_path):
         return json.load(f)
 
 def crc8_check(data):
-    hash = crc8.crc8()
-    hash.update(data)
-    return hash.digest()[0]
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x80:
+                crc = (crc << 1) ^ 0x07
+            else:
+                crc <<= 1
+            crc &= 0xFF
+    return crc
 
 def parse_binary_log_file(binary_path, format_strings):
     with open(binary_path, 'rb') as f:
