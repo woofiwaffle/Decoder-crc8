@@ -1,10 +1,12 @@
-# Input data
+# Test DAASDE
+
+## Input data
 
 - A JSON file with a set of format strings;
 - A binary file with a log messages dump.
 
 
-## The Task
+### The Task
 
 Develop a script `decoder.py` that decodes and prints log messages from the binary file to `stdout`. Keep message output order the same as in the binary file.
 The script messages (errors, etc.) should be printed to `stderr`.
@@ -12,7 +14,7 @@ The script messages (errors, etc.) should be printed to `stderr`.
 The script must take one positional argument "path to the binary file" and at least one named argument (`-m`) "path to the JSON file".
 
 
-## JSON file data format
+### JSON file data format
 
 The JSON file contains a collection of values `"<address>": "<format string>"`, where:
 - `"<address>"` is a non-zero address of the format string in program memory (numeric string identifier);
@@ -33,7 +35,7 @@ Format strings support a limited set of format specifiers `%c`, `%s`, `%d`, `%u`
 Examples of valid specifiers: `%c`, `%2d`, `%lld`, `%02X`.
 
 
-## Binary file data format
+### Binary file data format
 
 The binary file consists of `pages` each 512 bytes in size, byte order `LE`. The binary file size is a multiple of the `page` size.
 
@@ -71,7 +73,7 @@ The number of bytes allocated for storing arguments in the `data` array depends 
 For `%s` format specifiers, in `data` is stored the 32-bit address of the string (numeric identifier).
 
 
-## Extra requirements
+### Extra requirements
 
 Before each log message, print its `timestamp` and `timeOffsetUs` values in format `%010u.%06u`, separated from the log message by a space.
 
