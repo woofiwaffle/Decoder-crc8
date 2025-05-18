@@ -1,5 +1,3 @@
-# Test DAASDE
-
 ## Input data
 
 - A JSON file with a set of format strings;
