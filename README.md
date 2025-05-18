@@ -1,4 +1,6 @@
-## Input data
+## About
+
+### Input data
 
 - A JSON file with a set of format strings;
 - A binary file with a log messages dump.
